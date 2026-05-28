@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Analizador de Texto Distribuido</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0f172a;
+      --surface: #1e293b;
+      --border: #334155;
+      --accent: #6366f1;
+      --accent-light: #818cf8;
+      --text: #f1f5f9;
+      --muted: #94a3b8;
+      --pending: #f59e0b;
+      --processing: #3b82f6;
+      --completed: #22c55e;
+      --error: #ef4444;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem 1rem;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+    header h1 {
+      font-size: 1.8rem;
+      font-weight: 700;
+      background: linear-gradient(135deg, var(--accent-light), #a78bfa);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    header p {
+      color: var(--muted);
+      margin-top: 0.5rem;
+      font-size: 0.9rem;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 760px;
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.5rem;
+    }
+    .panel h2 {
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 1rem;
+    }
+
+    textarea {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 1rem;
+      padding: 1rem;
+      resize: vertical;
+      min-height: 140px;
+      font-family: inherit;
+      transition: border-color 0.2s;
+    }
+    textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    button {
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      padding: 0.75rem 1.5rem;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.1s;
+      margin-top: 1rem;
+      width: 100%;
+    }
+    button:hover { background: var(--accent-light); }
+    button:active { transform: scale(0.98); }
+    button:disabled { background: var(--border); cursor: not-allowed; }
+
+    .status-bar {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.75rem 1rem;
+      border-radius: 8px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+    }
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .status-text { font-weight: 600; }
+
+    .status-pending   .status-dot { background: var(--pending); animation: pulse 1s infinite; }
+    .status-processing .status-dot { background: var(--processing); animation: pulse 0.6s infinite; }
+    .status-completed  .status-dot { background: var(--completed); }
+    .status-error      .status-dot { background: var(--error); }
+
+    .status-pending    .status-text { color: var(--pending); }
+    .status-processing .status-text { color: var(--processing); }
+    .status-completed  .status-text { color: var(--completed); }
+    .status-error      .status-text { color: var(--error); }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.4; }
+    }
+
+    .results-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+    .metric {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem;
+      text-align: center;
+    }
+    .metric .value {
+      font-size: 1.8rem;
+      font-weight: 700;
+      color: var(--accent-light);
+    }
+    .metric .label {
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-top: 0.25rem;
+    }
+
+    .top-words {
+      margin-top: 1rem;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+    .word-tag {
+      background: var(--bg);
+      border: 1px solid var(--accent);
+      color: var(--accent-light);
+      border-radius: 20px;
+      padding: 0.25rem 0.75rem;
+      font-size: 0.85rem;
+    }
+
+    .task-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    .task-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.5rem 0.75rem;
+      background: var(--bg);
+      border-radius: 6px;
+      font-size: 0.85rem;
+    }
+    .task-item .task-id { color: var(--muted); font-family: monospace; }
+
+    .badge {
+      padding: 0.2rem 0.6rem;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .badge-pending    { background: rgba(245,158,11,0.15); color: var(--pending); }
+    .badge-processing { background: rgba(59,130,246,0.15); color: var(--processing); }
+    .badge-completed  { background: rgba(34,197,94,0.15);  color: var(--completed); }
+    .badge-error      { background: rgba(239,68,68,0.15);  color: var(--error); }
+
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>Analizador de Texto Distribuido</h1>
+  </header>
+
+  <div class="container">
+
+    <div class="panel">
+      <h2>Texto a analizar</h2>
+      <textarea id="textInput" placeholder="Escribe o pega tu texto aquí..."></textarea>
+      <button id="sendBtn" onclick="enviarTarea()">
+         Analizar texto
+      </button>
+    </div>
+
+    <div class="panel hidden" id="statusPanel">
+      <h2>Estado de la tarea actual</h2>
+      <div class="status-bar" id="statusBar">
+        <div class="status-dot"></div>
+        <span class="status-text" id="statusText">Enviando...</span>
+        <span style="color:var(--muted);font-size:0.8rem;margin-left:auto" id="taskIdDisplay"></span>
+      </div>
+
+      <div class="hidden" id="resultsDiv">
+        <div class="results-grid" id="resultsGrid"></div>
+        <div style="margin-top:1rem">
+          <p style="color:var(--muted);font-size:0.85rem;margin-bottom:0.5rem">Palabras más largas:</p>
+          <div class="top-words" id="topWords"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel" id="historyPanel">
+      <h2>Cola de tareas</h2>
+      <div class="task-list" id="taskList">
+        <p style="color:var(--muted);font-size:0.9rem">Aun no has enviado ninguna tarea.</p>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    const BACKEND_URL = "http://54.236.122.27:8000";
+
+    const tasks = {};
+
+    async function enviarTarea() {
+      const text = document.getElementById("textInput").value.trim();
+      if (!text) {
+        alert("Por favor escribe algún texto primero.");
+        return;
+      }
+
+      const btn = document.getElementById("sendBtn");
+      btn.disabled = true;
+      btn.textContent = " Enviando...";
+
+      try {
+        const response = await fetch(`${BACKEND_URL}/analyze`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text }),
+        });
+
+        const data = await response.json();
+        const taskId = data.task_id;
+
+        tasks[taskId] = { status: "pending", text: text.substring(0, 40) + "..." };
+        renderTaskList();
+
+        document.getElementById("statusPanel").classList.remove("hidden");
+        document.getElementById("taskIdDisplay").textContent = `ID: ${taskId.substring(0, 8)}`;
+        document.getElementById("resultsDiv").classList.add("hidden");
+        setStatus("pending");
+
+        escucharEstados(taskId);
+
+      } catch (error) {
+        alert(`Error al conectar con el backend: ${error.message}\n\nAsegúrate de que el backend está corriendo.`);
+        btn.disabled = false;
+        btn.textContent = "⚡ Analizar texto";
+      }
+    }
+
+    function escucharEstados(taskId) {
+      const source = new EventSource(`${BACKEND_URL}/status/${taskId}`);
+
+      source.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        const { status, result } = data;
+
+        setStatus(status);
+        tasks[taskId].status = status;
+        renderTaskList();
+
+        if (status === "completed" && result) {
+          mostrarResultados(result);
+          document.getElementById("resultsDiv").classList.remove("hidden");
+        }
+
+        if (status === "completed" || status === "error") {
+          source.close();
+          document.getElementById("sendBtn").disabled = false;
+          document.getElementById("sendBtn").textContent = " Analizar texto";
+        }
+      };
+
+      source.onerror = () => {
+        source.close();
+        document.getElementById("sendBtn").disabled = false;
+        document.getElementById("sendBtn").textContent = " Analizar texto";
+      };
+    }
+
+    function setStatus(status) {
+      const bar = document.getElementById("statusBar");
+      const text = document.getElementById("statusText");
+
+      bar.className = "status-bar";
+      bar.classList.add(`status-${status}`);
+
+      const labels = {
+        pending: " Pendiente — en cola esperando worker...",
+        processing: " En proceso — worker analizando el texto...",
+        completed: " Completado — análisis finalizado",
+        error: " Error — algo salió mal",
+      };
+      text.textContent = labels[status] || status;
+    }
+
+    function mostrarResultados(result) {
+      const grid = document.getElementById("resultsGrid");
+      grid.innerHTML = "";
+
+      const metrics = [
+        { value: result.total_words,            label: "Palabras" },
+        { value: result.total_characters,       label: "Caracteres" },
+        { value: result.total_sentences,        label: "Oraciones" },
+        { value: result.unique_words,           label: "Palabras únicas" },
+        { value: result.average_word_length,    label: "Largo promedio" },
+        { value: result.total_characters_no_spaces, label: "Sin espacios" },
+      ];
+
+      metrics.forEach(m => {
+        grid.innerHTML += `
+          <div class="metric">
+            <div class="value">${m.value}</div>
+            <div class="label">${m.label}</div>
+          </div>`;
+      });
+
+      const topDiv = document.getElementById("topWords");
+      topDiv.innerHTML = result.top_longest_words
+        .map(w => `<span class="word-tag">${w}</span>`)
+        .join("");
+    }
+
+    function renderTaskList() {
+      const list = document.getElementById("taskList");
+      const ids = Object.keys(tasks);
+      if (!ids.length) return;
+
+      list.innerHTML = ids.reverse().map(id => `
+        <div class="task-item">
+          <span class="task-id">${id.substring(0, 8)}...</span>
+          <span style="color:var(--muted);font-size:0.8rem;flex:1;margin:0 1rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${tasks[id].text}</span>
+          <span class="badge badge-${tasks[id].status}">${tasks[id].status}</span>
+        </div>`).join("");
+    }
+  </script>
+
+</body>
+</html>
